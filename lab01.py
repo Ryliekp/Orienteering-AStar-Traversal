@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from enum import Enum
 from PIL import Image
 from heapq import *
+from math import *
 
 
 class Env(Enum):                    # Color association
@@ -31,9 +32,9 @@ def heuristic(curr, end):
     d2 = 2**(1/2)
     dx = abs(curr.coors[0] - end.coords[0]) * 10.29
     dy = abs(curr.coors[1] - end.coords[1]) * 7.55
-    dist = d * (dx + dy) + (d2 - 2 * d) * min(dx, dy)
+    h_dist = d * (dx + dy) + (d2 - 2 * d) * min(dx, dy)
     ev = abs(end.elevation - curr.elevation)
-    pythagorean = ((dist**2) + (ev**2))**(1/2)
+    pythagorean = sqrt((h_dist**2) + (ev**2))
     cost = end.biome.value / pythagorean
     return cost
 
@@ -43,13 +44,65 @@ def estimatedCost(current, end):
     return cost
 
 
-def getNeighbors(popped):   # popped = (cost, (node, g(n), distance))
-    currCoords = popped[1][0].coords
-    vertDist =
-    return pix
+def childrenHelpFunc(x, y, popped, add_dist, array):
+    new_dist = popped[1][3] + add_dist
+    new_node = array[y][x]
+    new_g = popped[1][3] + (new_node.biome.value /
+                            sqrt((new_node.elevation ** 2) + (new_dist ** 2)))
+    new_tup = (new_node, new_g, new_dist)
+    return new_tup
 
 
-def aStar(start, end, paths):
+def getChildren(popped, array, end):   # popped = (cost, (node, g(n), distance))
+    x, y = popped[1][0].coords[0], popped[1][0].coords[0][1]
+    vert_dist = 7.55
+    horiz_dist = 10.29
+    diag_dist = sqrt((7.55**2) + (10.29**2))
+    children = []
+    # East
+    if (x-1) >= 0:
+        new_tup = childrenHelpFunc(x-1, y, popped, horiz_dist, array)
+        if new_tup[0].biome != Env.OUT_OF_BOUNDS:
+            children.append((estimatedCost(new_tup, end), new_tup))
+        # North-East
+        if (y-1) >= 0:
+            new_tup = childrenHelpFunc(x - 1, y - 1, popped, diag_dist, array)
+            if new_tup[0].biome != Env.OUT_OF_BOUNDS:
+                children.append((estimatedCost(new_tup, end), new_tup))
+        # South-East
+        if (y+1) <= 499:
+            new_tup = childrenHelpFunc(x - 1, y + 1, popped, diag_dist, array)
+            if new_tup[0].biome != Env.OUT_OF_BOUNDS:
+                children.append((estimatedCost(new_tup, end), new_tup))
+    # West
+    if (x+1) <= 394:
+        new_tup = childrenHelpFunc(x + 1, y, popped, horiz_dist, array)
+        if new_tup[0].biome != Env.OUT_OF_BOUNDS:
+            children.append((estimatedCost(new_tup, end), new_tup))
+        # North-West
+        if (y - 1) >= 0:
+            new_tup = childrenHelpFunc(x + 1, y - 1, popped, diag_dist, array)
+            if new_tup[0].biome != Env.OUT_OF_BOUNDS:
+                children.append((estimatedCost(new_tup, end), new_tup))
+        # South-West
+        if (y + 1) <= 499:
+            new_tup = childrenHelpFunc(x + 1, y + 1, popped, diag_dist, array)
+            if new_tup[0].biome != Env.OUT_OF_BOUNDS:
+                children.append((estimatedCost(new_tup, end), new_tup))
+    # North
+    if (y-1) >= 0:
+        new_tup = childrenHelpFunc(x, y + 1, popped, vert_dist, array)
+        if new_tup[0].biome != Env.OUT_OF_BOUNDS:
+            children.append((estimatedCost(new_tup, end), new_tup))
+    # South
+    if (y+1) <= 499:
+        new_tup = childrenHelpFunc(x, y + 1, popped, vert_dist, array)
+        if new_tup[0].biome != Env.OUT_OF_BOUNDS:
+            children.append((estimatedCost(new_tup, end), new_tup))
+    return 0
+
+
+def aStar(start, end, paths, array):
     # function
     # BEST-FIRST-SEARCH(problem, f)
     # node←NODE(STATE=problem.INITIAL)
@@ -68,12 +121,14 @@ def aStar(start, end, paths):
         if popped[1][1] == end:
             return popped[1][2]
         # for each child in EXPAND(problem, node) do
-        for child in getNeighbors(popped):
+        for child in getChildren(popped, array, end):
+            x = 'bob'   # placeholder
         #   s←child.STATE
         #   if s is not in reached or child.PATH-COST < reached[s].PATH-COST then
         #       reached[s]←child
         #       add child to frontier
     # return failure
+
 
 def processImage(image, ev_file):
     pixels = image.load()
@@ -108,9 +163,7 @@ def processImage(image, ev_file):
                     pix_biome = Env.OUT_OF_BOUNDS
                 case _:
                     raise Exception("Unknown Color")
-            # y = (0, (1, 2, 3))
-            # print(y[1][2])
-            pix_array[i].append(Square(pix_biome, (j, i), elevations[j], pix_color))
+            pix_array[i].append(Square(pix_biome, (j, i), float(elevations[j]), pix_color))
     return pix_array
 
 
@@ -119,4 +172,5 @@ if __name__ == '__main__':
     args = [0, 'terrain.png', 'mpp.txt']
     with Image.open(args[1]) as img, open(args[2]) as file:
         processed_img = processImage(img, file)
+        # distance = aStar(start, end, paths, processed_img)
         # print(processed_img)
