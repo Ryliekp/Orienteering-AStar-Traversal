@@ -99,7 +99,7 @@ def getChildren(popped, array, end):   # popped = (cost, (node, g(n), distance))
         new_tup = childrenHelpFunc(x, y + 1, popped, vert_dist, array)
         if new_tup[0].biome != Env.OUT_OF_BOUNDS:
             children.append((estimatedCost(new_tup, end), new_tup))
-    return 0
+    return children
 
 
 def aStar(start, end, paths, array):
@@ -122,12 +122,16 @@ def aStar(start, end, paths, array):
             return popped[1][2]
         # for each child in EXPAND(problem, node) do
         for child in getChildren(popped, array, end):
-            x = 'bob'   # placeholder
-        #   s←child.STATE
-        #   if s is not in reached or child.PATH-COST < reached[s].PATH-COST then
-        #       reached[s]←child
-        #       add child to frontier
+            # s←child.STATE
+            child_node = child[1][0]
+            # if s is not in reached or child.PATH-COST < reached[s].PATH-COST then
+            if child_node not in reached or child[0] < reached[child_node]:
+                # reached[s]←child
+                reached[child_node] = child[0]
+                # add child to frontier
+                heappush(frontier, child)
     # return failure
+    raise Exception("No Valid Path")
 
 
 def processImage(image, ev_file):
