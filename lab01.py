@@ -2,21 +2,21 @@ import sys
 from dataclasses import dataclass
 from enum import Enum
 from PIL import Image
-from heapq import *
 from math import *
+from queue import PriorityQueue
 
 
-class Env(Enum):                    # Color association
-    OPEN_LAND = 4.5                 # F89412 (248,148,18)
-    ROUGH_MEADOW = 3                # FFC000 (255,192,0)
-    EASY_MOVEMENT_FOREST = 3.5      # FFFFFF (255,255,255)
-    SLOW_RUN_FOREST = 3             # 02D03C (2,208,60)
-    WALK_FOREST = 2.5               # 028828 (2,136,40)
-    IMPASSIBLE_VEGETATION = 0.2     # 054918 (5,73,24)
-    LAKE_SWAMP_MARSH = 1.2          # 0000FF (0,0,255)
-    PAVED_ROAD = 5                  # 473303 (71,51,3)
-    FOOTPATH = 3.5                  # 000000 (0,0,0)
-    OUT_OF_BOUNDS = 0               # CD0065 (205,0,101)
+class Env(Enum):  # Color association
+    OPEN_LAND = 3.5  # F89412 (248,148,18)
+    ROUGH_MEADOW = 2.5  # FFC000 (255,192,0)
+    EASY_MOVEMENT_FOREST = 3  # FFFFFF (255,255,255)
+    SLOW_RUN_FOREST = 3  # 02D03C (2,208,60)
+    WALK_FOREST = 2.5  # 028828 (2,136,40)
+    IMPASSIBLE_VEGETATION = 0.2  # 054918 (5,73,24)
+    LAKE_SWAMP_MARSH = 1.2  # 0000FF (0,0,255)
+    PAVED_ROAD = 5.5  # 473303 (71,51,3)
+    FOOTPATH = 3.5  # 000000 (0,0,0)
+    OUT_OF_BOUNDS = 0  # CD0065 (205,0,101)
 
 
 @dataclass
@@ -26,124 +26,157 @@ class Square:
     elevation: float
     color: tuple
 
+    def __eq__(self, other):
+        return self.coords == other.coords
 
-def heuristic(curr, end):
-    d = 1
-    d2 = 2**(1/2)
-    dx = abs(curr.coors[0] - end.coords[0]) * 10.29
-    dy = abs(curr.coors[1] - end.coords[1]) * 7.55
-    h_dist = d * (dx + dy) + (d2 - 2 * d) * min(dx, dy)
-    ev = abs(end.elevation - curr.elevation)
-    pythagorean = sqrt((h_dist**2) + (ev**2))
-    cost = end.biome.value / pythagorean
+    def __lt__(self, other):
+        return self.biome.value > other.biome.value
+
+    def __gt__(self, other):
+        return self.biome.value < other.biome.value
+
+
+def heuristic(curr, end_node):
+    if curr.coords == end_node.coords:
+        return 0
+    dx = abs(curr.coords[0] - end_node.coords[0]) * 10.29
+    dy = abs(curr.coords[1] - end_node.coords[1]) * 7.55
+    ev = abs(end_node.elevation - curr.elevation)
+    hypotenuse = sqrt((dx ** 2) + (dy ** 2))
+    hypotenuse_with_ev = sqrt((hypotenuse ** 2) + (ev ** 2))
+    cost = hypotenuse_with_ev / end_node.biome.value
     return cost
 
 
-def estimatedCost(current, end):
-    cost = current(1) + heuristic(current[0], end)
+def estimatedCost(current, end_node):
+    cost = current[1] + heuristic(current[0], end_node)
     return cost
 
 
-def childrenHelpFunc(x, y, popped, add_dist, array):
-    new_dist = popped[1][3] + add_dist
-    new_node = array[y][x]
-    new_g = popped[1][3] + (new_node.biome.value /
-                            sqrt((new_node.elevation ** 2) + (new_dist ** 2)))
+def childrenHelpFunc(new_node, popped, add_dist):
+    new_dist = popped[1][2] + add_dist
+    new_g = popped[1][2] + (sqrt((new_node.elevation ** 2) + (new_dist ** 2))) / new_node.biome.value
     new_tup = (new_node, new_g, new_dist)
     return new_tup
 
 
-def getChildren(popped, array, end):   # popped = (cost, (node, g(n), distance))
-    x, y = popped[1][0].coords[0], popped[1][0].coords[0][1]
+# @Override
+# def compareTo()
+
+def getChildren(popped, array, end_node):  # popped = (cost, (node, g(n), distance))
+    x_coord, y_coord = popped[1][0].coords[0], popped[1][0].coords[1]
     vert_dist = 7.55
-    horiz_dist = 10.29
-    diag_dist = sqrt((7.55**2) + (10.29**2))
+    horizontal_dist = 10.29
+    diagonal_dist = sqrt((7.55 ** 2) + (10.29 ** 2))
     children = []
-    # East
-    if (x-1) >= 0:
-        new_tup = childrenHelpFunc(x-1, y, popped, horiz_dist, array)
-        if new_tup[0].biome != Env.OUT_OF_BOUNDS:
-            children.append((estimatedCost(new_tup, end), new_tup))
-        # North-East
-        if (y-1) >= 0:
-            new_tup = childrenHelpFunc(x - 1, y - 1, popped, diag_dist, array)
-            if new_tup[0].biome != Env.OUT_OF_BOUNDS:
-                children.append((estimatedCost(new_tup, end), new_tup))
-        # South-East
-        if (y+1) <= 499:
-            new_tup = childrenHelpFunc(x - 1, y + 1, popped, diag_dist, array)
-            if new_tup[0].biome != Env.OUT_OF_BOUNDS:
-                children.append((estimatedCost(new_tup, end), new_tup))
+
     # West
-    if (x+1) <= 394:
-        new_tup = childrenHelpFunc(x + 1, y, popped, horiz_dist, array)
-        if new_tup[0].biome != Env.OUT_OF_BOUNDS:
-            children.append((estimatedCost(new_tup, end), new_tup))
+    if (x_coord - 1) <= 394:
+        new_node = array[y_coord][x_coord - 1]
+        if new_node.biome != Env.OUT_OF_BOUNDS:
+            new_tup = childrenHelpFunc(new_node, popped, horizontal_dist)
+            children.append((estimatedCost(new_tup, end_node), new_tup))
         # North-West
-        if (y - 1) >= 0:
-            new_tup = childrenHelpFunc(x + 1, y - 1, popped, diag_dist, array)
-            if new_tup[0].biome != Env.OUT_OF_BOUNDS:
-                children.append((estimatedCost(new_tup, end), new_tup))
+        if (y_coord - 1) >= 0:
+            new_node = array[y_coord - 1][x_coord - 1]
+            if new_node.biome != Env.OUT_OF_BOUNDS:
+                new_tup = childrenHelpFunc(new_node, popped, diagonal_dist)
+                children.append((estimatedCost(new_tup, end_node), new_tup))
         # South-West
-        if (y + 1) <= 499:
-            new_tup = childrenHelpFunc(x + 1, y + 1, popped, diag_dist, array)
-            if new_tup[0].biome != Env.OUT_OF_BOUNDS:
-                children.append((estimatedCost(new_tup, end), new_tup))
+        if (y_coord + 1) <= 499:
+            new_node = array[y_coord + 1][x_coord - 1]
+            if new_node.biome != Env.OUT_OF_BOUNDS:
+                new_tup = childrenHelpFunc(new_node, popped, diagonal_dist)
+                children.append((estimatedCost(new_tup, end_node), new_tup))
+    # East
+    if (x_coord + 1) >= 0:
+        new_node = array[y_coord][x_coord + 1]
+        if new_node.biome != Env.OUT_OF_BOUNDS:
+            new_tup = childrenHelpFunc(new_node, popped, horizontal_dist)
+            children.append((estimatedCost(new_tup, end_node), new_tup))
+        # North-East
+        if (y_coord - 1) >= 0:
+            new_node = array[y_coord - 1][x_coord + 1]
+            if new_node.biome != Env.OUT_OF_BOUNDS:
+                new_tup = childrenHelpFunc(new_node, popped, diagonal_dist)
+                children.append((estimatedCost(new_tup, end_node), new_tup))
+        # South-East
+        if (y_coord + 1) <= 499:
+            new_node = array[y_coord + 1][x_coord + 1]
+            if new_node.biome != Env.OUT_OF_BOUNDS:
+                new_tup = childrenHelpFunc(new_node, popped, diagonal_dist)
+                children.append((estimatedCost(new_tup, end_node), new_tup))
     # North
-    if (y-1) >= 0:
-        new_tup = childrenHelpFunc(x, y + 1, popped, vert_dist, array)
-        if new_tup[0].biome != Env.OUT_OF_BOUNDS:
-            children.append((estimatedCost(new_tup, end), new_tup))
+    if (y_coord - 1) >= 0:
+        new_node = array[y_coord - 1][x_coord]
+        if new_node.biome != Env.OUT_OF_BOUNDS:
+            new_tup = childrenHelpFunc(new_node, popped, vert_dist)
+            children.append((estimatedCost(new_tup, end_node), new_tup))
     # South
-    if (y+1) <= 499:
-        new_tup = childrenHelpFunc(x, y + 1, popped, vert_dist, array)
-        if new_tup[0].biome != Env.OUT_OF_BOUNDS:
-            children.append((estimatedCost(new_tup, end), new_tup))
+    if (y_coord + 1) <= 499:
+        new_node = array[y_coord + 1][x_coord]
+        if new_node.biome != Env.OUT_OF_BOUNDS:
+            new_tup = childrenHelpFunc(new_node, popped, vert_dist)
+            children.append((estimatedCost(new_tup, end_node), new_tup))
     return children
 
 
-def aStar(start, end, paths, array):
-    # function
-    # BEST-FIRST-SEARCH(problem, f)
-    # node←NODE(STATE=problem.INITIAL)
-    # frontier←a priority queue ordered by f, with node as an element
-    frontier = []
-    current = (start, 0, 0)    # (node, g(n), distance)
-    cost = estimatedCost(current, end)
-    heappush(frontier, (cost, current))
-    # reached←a lookup table, with one entry with key problem.INITIAL and value node
-    reached = {start: cost}
-    # while not IS-EMPTY(frontier) do
+def getPath(start_node, end_node, parent_path, terrain_img):
+    """
+    get the path from the start word to goal word found with bfs
+    :param start_node: the starting pixel
+    :param end_node: the goal pixel
+    :param parent_path: a dictionary of pixels and their parents
+    :param terrain_img: the image to draw the path on
+    :return: a list of the steps in the path
+    """
+    path = [end_node.coords]
+    while path[-1] != start_node.coords:
+        try:
+            path.append(parent_path[path[-1]])
+        except KeyError:
+            print("No solution")
+            exit()
+    path.reverse()
+
+    # px = img.load()
+    for pixel in path:
+        terrain_img.putpixel((pixel[0], pixel[1]), (118, 63, 231))
+
+    return terrain_img
+
+
+def aStar(start_node, end_node, array):
+    frontier = PriorityQueue()
+    current = (start_node, 0, 0)  # (node, g(n), distance)
+    cost = estimatedCost(current, end_node)
+    frontier.put((cost, current))
+    reached = {start_node.coords: cost}
+    parent_path = {}
     while frontier:
-        # node←POP(frontier)
-        popped = heappop(frontier)     # popped = (cost, (node, g(n), distance))
-        # if problem.IS - GOAL(node.STATE) then return node
-        if popped[1][1] == end:
-            return popped[1][2]
-        # for each child in EXPAND(problem, node) do
-        for child in getChildren(popped, array, end):
-            # s←child.STATE
+        popped = frontier.get()
+        if popped[1][0].coords == end_node.coords:
+            return [popped[1][2], parent_path]
+        for child in getChildren(popped, array, end_node):
             child_node = child[1][0]
-            # if s is not in reached or child.PATH-COST < reached[s].PATH-COST then
-            if child_node not in reached or child[0] < reached[child_node]:
-                # reached[s]←child
-                reached[child_node] = child[0]
-                # add child to frontier
-                heappush(frontier, child)
-    # return failure
+            if child_node.coords not in reached or child[0] < reached[child_node.coords]:
+                reached[child_node.coords] = child[0]
+                frontier.put(child)
+                if child_node.coords not in parent_path or child[0] < reached[child_node.coords]:
+                    parent_path[child_node.coords] = popped[1][0].coords
     raise Exception("No Valid Path")
 
 
 def processImage(image, ev_file):
     pixels = image.load()
-    lines = [line.rstrip('\n') for line in ev_file]
+    file_lines = [line.rstrip('\n') for line in ev_file]
     img_width, img_height = image.size
     pix_array = []
-    for i in range(img_height):  # row
-        elevations = lines[i].split()[:395]
+    for row in range(img_height):  # row
+        elevations = file_lines[row].split()[:395]
         pix_array.append([])
         for j in range(img_width):  # col
-            pix_color = pixels[j, i][:3]
+            pix_color = pixels[j, row][:3]
             match pix_color:
                 case (248, 148, 18):
                     pix_biome = Env.OPEN_LAND
@@ -167,14 +200,28 @@ def processImage(image, ev_file):
                     pix_biome = Env.OUT_OF_BOUNDS
                 case _:
                     raise Exception("Unknown Color")
-            pix_array[i].append(Square(pix_biome, (j, i), float(elevations[j]), pix_color))
+            pix_array[row].append(Square(pix_biome, (j, row), float(elevations[j]), pix_color))
     return pix_array
 
 
 if __name__ == '__main__':
-    # args = sys.argv
-    args = [0, 'terrain.png', 'mpp.txt']
-    with Image.open(args[1]) as img, open(args[2]) as file:
+    args = sys.argv
+    with Image.open(args[1]) as img, open(args[2]) as file, open(args[3]) as destinations:
+        new_filename = args[4]
+        lines = [line.rstrip('\n') for line in destinations]
+        coords = []
+        for line in lines:
+            x = line.split()
+            coords.append((int(x[0]), int(x[1])))
+
         processed_img = processImage(img, file)
-        # distance = aStar(start, end, paths, processed_img)
-        # print(processed_img)
+        distance = 0
+        for i in range(len(coords) - 1):
+            start = processed_img[coords[i][1]][coords[i][0]]
+            end = processed_img[coords[i + 1][1]][coords[i + 1][0]]
+            result = aStar(start, end, processed_img)
+            distance += result[0]
+            paths = result[1]
+            img = getPath(start, end, paths, img)
+        print(distance)
+        img.save(new_filename)
