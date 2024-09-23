@@ -71,7 +71,7 @@ def getChildren(popped, array, end_node):  # popped = (cost, (node, g(n), distan
     children = []
 
     # West
-    if (x_coord - 1) <= 394:
+    if (x_coord - 1) >= 0:
         new_node = array[y_coord][x_coord - 1]
         if new_node.biome != Env.OUT_OF_BOUNDS:
             new_tup = childrenHelpFunc(new_node, popped, horizontal_dist)
@@ -89,7 +89,7 @@ def getChildren(popped, array, end_node):  # popped = (cost, (node, g(n), distan
                 new_tup = childrenHelpFunc(new_node, popped, diagonal_dist)
                 children.append((estimatedCost(new_tup, end_node), new_tup))
     # East
-    if (x_coord + 1) >= 0:
+    if (x_coord + 1) <= 394:
         new_node = array[y_coord][x_coord + 1]
         if new_node.biome != Env.OUT_OF_BOUNDS:
             new_tup = childrenHelpFunc(new_node, popped, horizontal_dist)
